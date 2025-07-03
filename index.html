@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Block War: Advanced Combat</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #222;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 960px;
+            height: 640px;
+            border: 4px solid #444;
+            overflow: hidden;
+            image-rendering: pixelated;
+        }
+        
+        #battlefield {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background-color: #7ABA7A; /* Grass color */
+        }
+        
+        .tile {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background-size: cover;
+        }
+        
+        .water { background-color: #3A96DD; }
+        .deep-water { background-color: #2A7BBD; }
+        .forest { background-color: #2D7D32; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="3" r="4" fill="%231B5E20"/></svg>'); }
+        .mountain { background-color: #8D6E63; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><polygon points="5,0 10,10 0,10" fill="%236D4C41"/></svg>'); }
+        
+        .unit {
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            text-shadow: 1px 1px 2px black;
+            transition: left 0.3s ease, top 0.3s ease;
+            z-index: 10;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+        
+        .player1 { background-color: #E53935; } /* Red */
+        .player2 { background-color: #3949AB; } /* Blue */
+        
+        .health-bar {
+            position: absolute;
+            bottom: -6px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background-color: #333;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        
+        .health-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.2s;
+        }
+        
+        .projectile {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background-color: #FFEB3B;
+            border-radius: 50%;
+            z-index: 5;
+            box-shadow: 0 0 5px #FFC107;
+        }
+        
+        .missile {
+            width: 12px;
+            height: 6px;
+            background-color: #FF5722;
+            border-radius: 3px;
+            box-shadow: 0 0 8px #FF9800;
+        }
+        
+        #ui-container {
+            width: 960px;
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        #unit-palette {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .unit-option {
+            padding: 8px 12px;
+            border: 2px solid #555;
+            border-radius: 5px;
+            cursor: pointer;
+            background-color: #333;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .unit-option:hover {
+            background-color: #444;
+        }
+        
+        .unit-option.selected {
+            border-color: #4CAF50;
+            background-color: #2E7D32;
+        }
+        
+        #game-info {
+            background-color: #333;
+            padding: 10px 15px;
+            border-radius: 5px;
+            min-width: 200px;
+        }
+        
+        #start-battle-btn {
+            padding: 10px 25px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        
+        #start-battle-btn:hover {
+            background-color: #388E3C;
+        }
+        
+        #start-battle-btn:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        
+        #battle-log {
+            width: 960px;
+            height: 100px;
+            margin-top: 15px;
+            background-color: #111;
+            border: 2px solid #444;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        
+        .log-entry {
+            margin: 3px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #333;
+        }
+        
+        .player1-log { color: #EF9A9A; }
+        .player2-log { color: #9FA8DA; }
+        .system-log { color: #B0BEC5; }
+    </style>
+</head>
+<body>
+    <h1>BLOCK WAR: Advanced Combat</h1>
+    
+    <div id="ui-container">
+        <div id="unit-palette">
+            <div class="unit-option" data-unit="infantry">Infantry ($100)</div>
+            <div class="unit-option" data-unit="tank">Tank ($300)</div>
+            <div class="unit-option" data-unit="artillery">Artillery ($250)</div>
+            <div class="unit-option" data-unit="helicopter">Helicopter ($400)</div>
+            <div class="unit-option" data-unit="submarine">Submarine ($350)</div>
+        </div>
+        
+        <div id="game-info">
+            <div>Player <span id="current-player">1</span> | Funds: $<span id="funds">1000</span></div>
+            <div>Units: <span id="unit-count">0</span></div>
+        </div>
+        
+        <button id="start-battle-btn" disabled>START BATTLE</button>
+    </div>
+    
+    <div id="game-container">
+        <div id="battlefield"></div>
+    </div>
+    
+    <div id="battle-log"></div>
+    
+    <script>
+        // ========================
+        // Game Configuration
+        // ========================
+        const CONFIG = {
+            mapWidth: 32,  // In tiles
+            mapHeight: 20, // In tiles
+            tileSize: 30,  // Pixels
+            playerFunds: 1500,
+            fps: 60
+        };
+        
+        // ========================
+        // Game State
+        // ========================
+        const gameState = {
+            currentPlayer: 1,
+            selectedUnitType: null,
+            units: [],
+            projectiles: [],
+            funds: [CONFIG.playerFunds, CONFIG.playerFunds],
+            gamePhase: "setup",
+            battlefield: {
+                width: CONFIG.mapWidth * CONFIG.tileSize,
+                height: CONFIG.mapHeight * CONFIG.tileSize
+            },
+            terrain: [],
+            lastFrameTime: 0,
+            battleLog: []
+        };
+        
+        // ========================
+        // Unit Definitions
+        // ========================
+        const UNIT_TYPES = {
+            infantry: {
+                name: "Infantry",
+                cost: 100,
+                symbol: "I",
+                speed: 1.8,
+                waterSpeed: 0.6,
+                attackRange: 5,
+                attackDamage: 15,  // Increased from 12
+                health: 100,
+                canSwim: true,
+                projectileType: "bullet",
+                attackCooldown: 800,  // Faster attacks
+                color: "#E53935",
+                description: "Basic soldier. Fast firing but weak damage."
+            },
+            tank: {
+                name: "Tank",
+                cost: 300,
+                symbol: "T",
+                speed: 1.2,
+                waterSpeed: 0.3,
+                attackRange: 6,
+                attackDamage: 40,  // Increased from 25 (heavy hitter)
+                health: 250,  // Increased from 200
+                canSwim: false,
+                projectileType: "shell",
+                attackCooldown: 2000,  // Slower but powerful
+                color: "#D32F2F",
+                description: "Heavy armor. Massive damage but slow."
+            },
+            artillery: {
+                name: "Artillery",
+                cost: 400,  // Increased cost
+                symbol: "A",
+                speed: 0.8,
+                waterSpeed: 0.1,
+                attackRange: 14,  // Increased from 12
+                attackDamage: 60,  // Massive damage (from 35)
+                health: 90,  // Slightly more fragile
+                canSwim: false,
+                projectileType: "missile",
+                attackCooldown: 3000,  // Very slow but devastating
+                color: "#F44336",
+                description: "Long-range devastation. Slow but destroys everything."
+            },
+            helicopter: {
+                name: "Gunship",  // Renamed to reflect power
+                cost: 500,  // More expensive
+                symbol: "H",
+                speed: 2.8,  // Faster
+                waterSpeed: 2.8,
+                attackRange: 8,
+                attackDamage: 25,  // Increased from 18
+                health: 140,  // Tougher
+                canSwim: true,
+                projectileType: "missile",
+                attackCooldown: 1000,  // Rapid fire
+                color: "#EC407A",
+                description: "Air superiority. Fast and deadly against ground units."
+            },
+            submarine: {
+                name: "Nuclear Sub",  // Renamed
+                cost: 600,  // Most expensive unit
+                symbol: "S",
+                speed: 1.5,
+                waterSpeed: 2.0,
+                attackRange: 12,  // Increased from 10
+                attackDamage: 75,  // Devastating torpedoes (from 30)
+                health: 180,  // Tougher
+                canSwim: true,
+                projectileType: "torpedo",
+                attackCooldown: 2500,  // Slow but nuclear-powered
+                color: "#5C6BC0",
+                waterOnly: true,
+                description: "Underwater dominator. Extremely powerful but water-only."
+            },
+            sniper: {  // NEW UNIT: Specialized anti-infantry
+                name: "Sniper",
+                cost: 350,
+                symbol: "S",
+                speed: 1.0,
+                waterSpeed: 0.4,
+                attackRange: 16,  // Extreme range
+                attackDamage: 30,  // High damage vs infantry
+                health: 70,  // Very fragile
+                canSwim: false,
+                projectileType: "bullet",
+                attackCooldown: 1500,
+                color: "#8D6E63",
+                description: "Elite marksman. Kills infantry in one shot but vulnerable."
+            }
+        };
+
+        
+        // ========================
+        // DOM Elements
+        // ========================
+        const battlefield = document.getElementById("battlefield");
+        const currentPlayerDisplay = document.getElementById("current-player");
+        const fundsDisplay = document.getElementById("funds");
+        const unitCountDisplay = document.getElementById("unit-count");
+        const startBattleBtn = document.getElementById("start-battle-btn");
+        const unitOptions = document.querySelectorAll(".unit-option");
+        const battleLog = document.getElementById("battle-log");
+        
+        // ========================
+        // Initialization
+        // ========================
+        function initGame() {
+            // Set battlefield size
+            battlefield.style.width = `${gameState.battlefield.width}px`;
+            battlefield.style.height = `${gameState.battlefield.height}px`;
+            
+            // Generate terrain
+            generateTerrain();
+            
+            // Reset game state
+            gameState.currentPlayer = 1;
+            gameState.units = [];
+            gameState.projectiles = [];
+            gameState.funds = [CONFIG.playerFunds, CONFIG.playerFunds];
+            gameState.gamePhase = "setup";
+            gameState.battleLog = [];
+            
+            // Clear DOM
+            battlefield.innerHTML = "";
+            battleLog.innerHTML = "";
+            
+            // Render terrain
+            renderTerrain();
+            
+            // Update UI
+            updateUI();
+            
+            // Start game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // ========================
+        // Terrain Generation
+        // ========================
+        function generateTerrain() {
+            gameState.terrain = [];
+            
+            // Create base grass tiles
+            for (let y = 0; y < CONFIG.mapHeight; y++) {
+                gameState.terrain[y] = [];
+                for (let x = 0; x < CONFIG.mapWidth; x++) {
+                    gameState.terrain[y][x] = "grass";
+                }
+            }
+            
+            // Add rivers
+            createRiver(8, 5, 24, 15);
+            createRiver(12, 2, 20, 18);
+            
+            // Add forests
+            createForest(5, 3, 6, 4);
+            createForest(22, 4, 5, 5);
+            createForest(10, 14, 7, 3);
+            
+            // Add mountains
+            createMountain(3, 10, 4, 3);
+            createMountain(25, 8, 4, 4);
+            createMountain(15, 2, 3, 2);
+            
+            // Add deep water areas
+            createDeepWater(7, 12, 3, 4);
+            createDeepWater(22, 6, 4, 5);
+        }
+        
+        function createRiver(startX, startY, endX, endY) {
+            // Simple river generation (could be improved with noise)
+            for (let x = startX; x < endX; x++) {
+                const y = Math.floor(startY + (endY - startY) * (x - startX) / (endX - startX));
+                for (let w = -1; w <= 1; w++) {
+                    if (y + w >= 0 && y + w < CONFIG.mapHeight) {
+                        gameState.terrain[y + w][x] = "water";
+                    }
+                }
+            }
+        }
+        
+        function createForest(x, y, width, height) {
+            for (let dy = 0; dy < height; dy++) {
+                for (let dx = 0; dx < width; dx++) {
+                    if (y + dy < CONFIG.mapHeight && x + dx < CONFIG.mapWidth) {
+                        gameState.terrain[y + dy][x + dx] = "forest";
+                    }
+                }
+            }
+        }
+        
+        function createMountain(x, y, width, height) {
+            for (let dy = 0; dy < height; dy++) {
+                for (let dx = 0; dx < width; dx++) {
+                    if (y + dy < CONFIG.mapHeight && x + dx < CONFIG.mapWidth) {
+                        gameState.terrain[y + dy][x + dx] = "mountain";
+                    }
+                }
+            }
+        }
+        
+        function createDeepWater(x, y, width, height) {
+            for (let dy = 0; dy < height; dy++) {
+                for (let dx = 0; dx < width; dx++) {
+                    if (y + dy < CONFIG.mapHeight && x + dx < CONFIG.mapWidth) {
+                        gameState.terrain[y + dy][x + dx] = "deep-water";
+                    }
+                }
+            }
+        }
+        
+        // ========================
+        // Rendering
+        // ========================
+        function renderTerrain() {
+            for (let y = 0; y < CONFIG.mapHeight; y++) {
+                for (let x = 0; x < CONFIG.mapWidth; x++) {
+                    const tile = document.createElement("div");
+                    tile.className = `tile ${gameState.terrain[y][x]}`;
+                    tile.style.left = `${x * CONFIG.tileSize}px`;
+                    tile.style.top = `${y * CONFIG.tileSize}px`;
+                    battlefield.appendChild(tile);
+                }
+            }
+        }
+        
+        function renderUnits() {
+            // Clear existing unit elements
+            document.querySelectorAll(".unit").forEach(el => el.remove());
+            
+            // Render each unit
+            gameState.units.forEach(unit => {
+                if (unit.health <= 0) return;
+                
+                const unitElement = document.createElement("div");
+                unitElement.className = `unit player${unit.player}`;
+                unitElement.textContent = unit.symbol;
+                unitElement.style.left = `${unit.x}px`;
+                unitElement.style.top = `${unit.y}px`;
+                unitElement.style.backgroundColor = UNIT_TYPES[unit.type].color;
+                
+                // Add health bar
+                const healthBar = document.createElement("div");
+                healthBar.className = "health-bar";
+                const healthFill = document.createElement("div");
+                healthFill.className = "health-fill";
+                healthFill.style.width = `${(unit.health / UNIT_TYPES[unit.type].health) * 100}%`;
+                healthBar.appendChild(healthFill);
+                unitElement.appendChild(healthBar);
+                
+                battlefield.appendChild(unitElement);
+                unit.element = unitElement;
+            });
+        }
+        
+        function renderProjectiles() {
+            // Clear existing projectiles
+            document.querySelectorAll(".projectile").forEach(el => el.remove());
+            
+            // Render each projectile
+            gameState.projectiles.forEach(proj => {
+                const projElement = document.createElement("div");
+                projElement.className = `projectile ${proj.type}`;
+                projElement.style.left = `${proj.x}px`;
+                projElement.style.top = `${proj.y}px`;
+                
+                // Add trail effect for missiles
+                if (proj.type === "missile" || proj.type === "torpedo") {
+                    projElement.style.transform = `rotate(${proj.angle}rad)`;
+                }
+                
+                battlefield.appendChild(projElement);
+            });
+        }
+        
+        // ========================
+        // Game Logic
+        // ========================
+        function placeUnit(type, player, x, y) {
+            const unitData = UNIT_TYPES[type];
+            
+            // Validate placement
+            if (!validateUnitPlacement(type, player, x, y)) {
+                return false;
+            }
+            
+            // Create unit
+            const unit = {
+                id: generateId(),
+                type: type,
+                player: player,
+                x: x * CONFIG.tileSize + CONFIG.tileSize / 2,
+                y: y * CONFIG.tileSize + CONFIG.tileSize / 2,
+                health: unitData.health,
+                attackRange: unitData.attackRange * CONFIG.tileSize,
+                attackDamage: unitData.attackDamage,
+                speed: unitData.speed,
+                waterSpeed: unitData.waterSpeed,
+                canSwim: unitData.canSwim,
+                projectileType: unitData.projectileType,
+                lastAttackTime: 0,
+                attackCooldown: unitData.attackCooldown,
+                target: null,
+                symbol: unitData.symbol
+            };
+            
+            gameState.units.push(unit);
+            gameState.funds[player - 1] -= unitData.cost;
+            
+            // Check if player can place more units
+            checkPlacementCompletion();
+            
+            // Re-render units
+            renderUnits();
+            
+            return true;
+        }
+        
+        function validateUnitPlacement(type, player, gridX, gridY) {
+            const unitData = UNIT_TYPES[type];
+            
+            // Check funds
+            if (gameState.funds[player - 1] < unitData.cost) {
+                addToLog(`Not enough funds for ${unitData.name}!`, "system");
+                return false;
+            }
+            
+            // Check player territory
+            const playerSide = player === 1 ? 0 : CONFIG.mapWidth / 2;
+            if ((player === 1 && gridX >= CONFIG.mapWidth / 2) || 
+                (player === 2 && gridX < CONFIG.mapWidth / 2)) {
+                addToLog(`Player ${player}, place units on your side!`, "system");
+                return false;
+            }
+            
+            // Check water placement for submarines
+            if (unitData.waterOnly && !isWaterTile(gridX, gridY)) {
+                addToLog("Submarines can only be placed in water!", "system");
+                return false;
+            }
+            
+            // Check if tile is occupied
+            const pixelX = gridX * CONFIG.tileSize + CONFIG.tileSize / 2;
+            const pixelY = gridY * CONFIG.tileSize + CONFIG.tileSize / 2;
+            
+            for (const unit of gameState.units) {
+                const dx = unit.x - pixelX;
+                const dy = unit.y - pixelY;
+                if (Math.sqrt(dx * dx + dy * dy) < CONFIG.tileSize) {
+                    addToLog("Tile is already occupied!", "system");
+                    return false;
+                }
+            }
+            
+            return true;
+        }
+        
+        function isWaterTile(x, y) {
+            if (y < 0 || y >= CONFIG.mapHeight || x < 0 || x >= CONFIG.mapWidth) return false;
+            return gameState.terrain[y][x] === "water" || gameState.terrain[y][x] === "deep-water";
+        }
+        
+        function startBattle() {
+            gameState.gamePhase = "battle";
+            addToLog("=== BATTLE STARTED ===", "system");
+            
+            // Disable setup UI
+            startBattleBtn.disabled = true;
+            unitOptions.forEach(opt => opt.style.display = "none");
+            
+            // Initialize unit targets
+            gameState.units.forEach(unit => {
+                unit.target = findClosestEnemy(unit);
+            });
+        }
+        
+        // ========================
+        // Battle System
+        // ========================
+        function updateBattle(deltaTime) {
+            // Update units
+            gameState.units.forEach(unit => {
+                if (unit.health <= 0) return;
+                
+                // Find new target if current is dead or missing
+                if (!unit.target || unit.target.health <= 0) {
+                    unit.target = findClosestEnemy(unit);
+                    if (unit.target) {
+                        addToLog(`${UNIT_TYPES[unit.type].name} acquired new target`, `player${unit.player}`);
+                    }
+                }
+                
+                // Move toward target if exists
+                if (unit.target) {
+                    moveUnit(unit, deltaTime);
+                    tryAttack(unit, deltaTime);
+                }
+            });
+            
+            // Update projectiles
+            updateProjectiles(deltaTime);
+            
+            // Check victory conditions
+            checkVictory();
+        }
+        
+        function moveUnit(unit, deltaTime) {
+            const dx = unit.target.x - unit.x;
+            const dy = unit.target.y - unit.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // If in attack range, don't move
+            if (distance <= unit.attackRange) return;
+            
+            // Calculate movement speed (slower in water)
+            const gridX = Math.floor(unit.x / CONFIG.tileSize);
+            const gridY = Math.floor(unit.y / CONFIG.tileSize);
+            const inWater = isWaterTile(gridX, gridY);
+            const speed = (inWater ? unit.waterSpeed : unit.speed) * (deltaTime / 16);
+            
+            // Move toward target
+            if (distance > 0) {
+                unit.x += (dx / distance) * speed;
+                unit.y += (dy / distance) * speed;
+            }
+        }
+        
+        function tryAttack(unit, deltaTime) {
+            const currentTime = performance.now();
+            
+            // Check if attack is off cooldown
+            if (currentTime - unit.lastAttackTime < unit.attackCooldown) return;
+            
+            const dx = unit.target.x - unit.x;
+            const dy = unit.target.y - unit.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Check if target is in range
+            if (distance <= unit.attackRange) {
+                // Create projectile
+                const angle = Math.atan2(dy, dx);
+                gameState.projectiles.push({
+                    x: unit.x,
+                    y: unit.y,
+                    target: unit.target,
+                    speed: 8,
+                    damage: unit.attackDamage,
+                    type: unit.projectileType,
+                    angle: angle,
+                    owner: unit
+                });
+                
+                // Reset attack cooldown
+                unit.lastAttackTime = currentTime;
+                
+                addToLog(`${UNIT_TYPES[unit.type].name} fired at ${UNIT_TYPES[unit.target.type].name}`, `player${unit.player}`);
+            }
+        }
+        
+        function updateProjectiles(deltaTime) {
+            const speedFactor = deltaTime / 16;
+            
+            for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
+                const proj = gameState.projectiles[i];
+                
+                // Move projectile
+                const dx = proj.target.x - proj.x;
+                const dy = proj.target.y - proj.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < 10) { // Hit target
+                    // Apply damage with potential critical hits
+                    let finalDamage = proj.damage;
+                    
+                    // Critical hit chance (20% for bullets, 10% for others)
+                    if (proj.type === "bullet" && Math.random() < 0.2) {
+                        finalDamage *= 1.5; // 50% more damage
+                        addToLog(`CRITICAL HIT! ${finalDamage} damage`, `player${proj.owner.player}`);
+                    } else if (Math.random() < 0.1) {
+                        finalDamage *= 1.3; // 30% more damage
+                        addToLog(`CRITICAL HIT! ${finalDamage} damage`, `player${proj.owner.player}`);
+                    }
+                    
+                    // Special damage multipliers
+                    if (proj.owner.type === "sniper" && proj.target.type === "infantry") {
+                        finalDamage *= 2; // Double damage against infantry
+                    }
+                    
+                    proj.target.health -= finalDamage;
+                    
+                    // Remove projectile
+                    gameState.projectiles.splice(i, 1);
+                    
+                    // Check if target died
+                    if (proj.target.health <= 0) {
+                        proj.target.health = 0;
+                        addToLog(`${UNIT_TYPES[proj.target.type].name} was destroyed!`, "system");
+                    }
+                } else {
+                    // Move toward target
+                    proj.x += (dx / distance) * proj.speed * speedFactor;
+                    proj.y += (dy / distance) * proj.speed * speedFactor;
+                    
+                    // Special behavior for missiles (arc motion)
+                    if (proj.type === "missile" && distance > proj.owner.attackRange * 0.7) {
+                        proj.y -= 0.2 * speedFactor; // Slight upward arc
+                    }
+                }
+            }
+        }
+
+        function findClosestEnemy(unit) {
+            let closestEnemy = null;
+            let closestDistance = Infinity;
+            
+            gameState.units.forEach(otherUnit => {
+                if (otherUnit.player === unit.player || otherUnit.health <= 0) return;
+                
+                const dx = otherUnit.x - unit.x;
+                const dy = otherUnit.y - unit.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestEnemy = otherUnit;
+                }
+            });
+            
+            return closestEnemy;
+        }
+        
+        function checkVictory() {
+            const player1Units = gameState.units.filter(u => u.player === 1 && u.health > 0);
+            const player2Units = gameState.units.filter(u => u.player === 2 && u.health > 0);
+            
+            if (player1Units.length === 0 && player2Units.length === 0) {
+                endGame("draw");
+            } else if (player1Units.length === 0) {
+                endGame(2);
+            } else if (player2Units.length === 0) {
+                endGame(1);
+            }
+        }
+        
+        function endGame(winner) {
+            gameState.gamePhase = "ended";
+            
+            if (winner === "draw") {
+                addToLog("=== BATTLE ENDED IN A DRAW ===", "system");
+            } else {
+                addToLog(`=== PLAYER ${winner} WINS! ===`, "system");
+            }
+        }
+        
+        // ========================
+        // UI Functions
+        // ========================
+        function updateUI() {
+            // Update player display
+            currentPlayerDisplay.textContent = gameState.currentPlayer;
+            
+            // Update funds display
+            fundsDisplay.textContent = gameState.funds[gameState.currentPlayer - 1];
+            
+            // Update unit count
+            const playerUnits = gameState.units.filter(u => u.player === gameState.currentPlayer);
+            unitCountDisplay.textContent = playerUnits.length;
+            
+            // Update start battle button
+            const bothPlayersReady = gameState.funds[0] < 100 && gameState.funds[1] < 100;
+            startBattleBtn.disabled = gameState.currentPlayer === 1 || !bothPlayersReady;
+        }
+        
+        function checkPlacementCompletion() {
+            // Check if current player can place more units
+            const canPlaceMore = Object.values(UNIT_TYPES).some(
+                unit => unit.cost <= gameState.funds[gameState.currentPlayer - 1]
+            );
+            
+            if (!canPlaceMore) {
+                // Switch to next player or enable battle start
+                if (gameState.currentPlayer === 1) {
+                    gameState.currentPlayer = 2;
+                    addToLog("Player 2's turn to place units", "system");
+                } else {
+                    addToLog("Both players ready. Prepare for battle!", "system");
+                }
+            }
+            
+            updateUI();
+        }
+        
+        function addToLog(message, type = "system") {
+            const entry = document.createElement("div");
+            entry.className = `log-entry ${type}-log`;
+            entry.textContent = message;
+            battleLog.appendChild(entry);
+            battleLog.scrollTop = battleLog.scrollHeight;
+            
+            // Keep log from growing too large
+            if (battleLog.children.length > 50) {
+                battleLog.removeChild(battleLog.children[0]);
+            }
+        }
+        
+        // ========================
+        // Utility Functions
+        // ========================
+        function generateId() {
+            return Math.random().toString(36).substr(2, 9);
+        }
+        
+        function getGridCoordinates(x, y) {
+            return {
+                gridX: Math.floor(x / CONFIG.tileSize),
+                gridY: Math.floor(y / CONFIG.tileSize)
+            };
+        }
+        
+        // ========================
+        // Game Loop
+        // ========================
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - gameState.lastFrameTime;
+            gameState.lastFrameTime = timestamp;
+            
+            // Only update battle logic if in battle phase
+            if (gameState.gamePhase === "battle") {
+                updateBattle(deltaTime);
+                renderUnits();
+                renderProjectiles();
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // ========================
+        // Event Listeners
+        // ========================
+        function setupEventListeners() {
+            // Unit selection
+            unitOptions.forEach(option => {
+                option.addEventListener("click", () => {
+                    const unitType = option.dataset.unit;
+                    
+                    if (gameState.funds[gameState.currentPlayer - 1] >= UNIT_TYPES[unitType].cost) {
+                        unitOptions.forEach(opt => opt.classList.remove("selected"));
+                        option.classList.add("selected");
+                        gameState.selectedUnitType = unitType;
+                        addToLog(`Selected: ${UNIT_TYPES[unitType].name}`, "system");
+                    } else {
+                        addToLog(`Not enough funds for ${UNIT_TYPES[unitType].name}!`, "system");
+                    }
+                });
+            });
+            
+            // Battlefield click (unit placement)
+            battlefield.addEventListener("click", (e) => {
+                if (gameState.gamePhase !== "setup" || !gameState.selectedUnitType) return;
+                
+                const rect = battlefield.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const { gridX, gridY } = getGridCoordinates(x, y);
+                
+                placeUnit(gameState.selectedUnitType, gameState.currentPlayer, gridX, gridY);
+            });
+            
+            // Start battle button
+            startBattleBtn.addEventListener("click", startBattle);
+        }
+        
+        // ========================
+        // Initialize Game
+        // ========================
+        initGame();
+        setupEventListeners();
+    </script>
+</body>
+</html>
